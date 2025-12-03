@@ -1,0 +1,20 @@
+{
+  "name": "Old Times",
+  "version": "1.0",
+  "manifest_version": 3,
+  "description": "Cronômetro e temporizador com acessibilidade.",
+  "action": {
+    "default_popup": "index.html",
+    "default_icon": {
+        "16": "icons/ot-icon16.png",
+        "48": "icons/ot-icon48.png",
+        "128": "icons/ot-icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/ot-icon16.png",
+    "48": "icons/ot-icon48.png",
+    "128": "icons/ot-icon128.png",
+    "300": "icons/ot-icon300.png"
+  }
+}
