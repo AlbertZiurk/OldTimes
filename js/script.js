@@ -1,137 +1,322 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Referências do DOM
-    const body = document.body;
-    const btnTheme = document.getElementById('btn-theme');
-    const btnAccess = document.getElementById('btn-accessibility');
-    const menuAccess = document.getElementById('accessibility-menu');
-    const checkContrast = document.getElementById('toggle-contrast');
-    const zoomRadios = document.querySelectorAll('input[name="zoom"]');
+
+  // =========================================
+  // 1. REFERÊNCIAS DO DOM (ELEMENTOS)
+  // =========================================
+  const elements = {
+    body: document.body,
+    appWrapper: document.getElementById('app-wrapper'),
     
-    // Controles do Timer
-    const display = document.getElementById('display');
-    const btnPlayPause = document.getElementById('btn-play-pause');
-    const btnReset = document.getElementById('btn-reset');
-    const imgPlayPause = document.getElementById('img-play-pause');
+    // Menu e Acessibilidade
+    btnAccess: document.getElementById('btn-accessibility'),
+    menuAccess: document.getElementById('accessibility-menu'),
+    checkContrast: document.getElementById('toggle-contrast'),
+    zoomRadios: document.querySelectorAll('input[name="zoom"]'),
+    btnTheme: document.getElementById('btn-theme'),
+    imgTheme: document.getElementById('img-theme'),
     
-    // Estado
-    let isRunning = false;
-    let isDarkMode = false;
-    let isHighContrast = false;
-    let timerInterval;
-    let seconds = 0;
+    // Display e Inputs
+    display: document.getElementById('display'),
+    inputWrapper: document.getElementById('input-wrapper'),
+    inputMin: document.getElementById('input-min'),
+    inputSec: document.getElementById('input-sec'),
+    progressRing: document.querySelector('.progress-ring'),
+    
+    // Botões de Controle
+    btnPlayPause: document.getElementById('btn-play-pause'),
+    btnReset: document.getElementById('btn-reset'),
+    imgPlayPause: document.getElementById('img-play-pause'),
+    
+    // Botões de Modo
+    btnModeChrono: document.getElementById('mode-chrono'),
+    btnModeTimer: document.getElementById('mode-timer'),
 
-    // --- Acessibilidade: Navegação por Teclado e Menus ---
+    // FAQ
+    btnFaq: document.getElementById('btn-faq'),
+    faqView: document.getElementById('faq-view'),
+    btnCloseFaq: document.getElementById('btn-close-faq'),
+    mainView: document.getElementById('main-view'), // Referência ao container principal
+  };
 
-    // Toggle Menu de Acessibilidade
-    btnAccess.addEventListener('click', () => {
-        const isHidden = menuAccess.classList.contains('hidden');
-        if (isHidden) {
-            menuAccess.classList.remove('hidden');
-            menuAccess.setAttribute('aria-hidden', 'false');
-            // Foca no primeiro item do menu para facilitar navegação
-            checkContrast.focus();
-        } else {
-            closeAccessMenu();
-        }
-    });
+  // =========================================
+  // 2. CONFIGURAÇÃO E ESTADO
+  // =========================================
+  const CONFIG = { 
+    baseWidth: 200, 
+    baseHeight: 250 
+  };
 
-    function closeAccessMenu() {
-        menuAccess.classList.add('hidden');
-        menuAccess.setAttribute('aria-hidden', 'true');
-        btnAccess.focus(); // Retorna o foco para o botão que abriu
+  let state = {
+    mode: 'CHRONO', // 'CHRONO' ou 'TIMER'
+    isRunning: false,
+    isDarkMode: false,
+    isHighContrast: false,
+    timerInterval: null,
+    totalSeconds: 0,
+    initialTimerSeconds: 0 // Usado para resetar o timer ao valor original
+  };
+
+  // =========================================
+  // 3. FUNÇÕES LÓGICAS (HELPERS)
+  // =========================================
+
+  // Formata segundos em MM:SS
+  const formatTime = (totalSeconds) => {
+    const mins = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+    const secs = (totalSeconds % 60).toString().padStart(2, '0');
+    return `${mins}:${secs}`;
+  };
+
+  // Atualiza o texto do display
+  const updateDisplay = () => {
+    elements.display.textContent = formatTime(state.totalSeconds);
+  };
+
+  // Alterna visibilidade do Menu de Acessibilidade
+  const toggleAccessMenu = (show) => {
+    if (show) {
+      elements.menuAccess.classList.remove('hidden');
+      elements.menuAccess.setAttribute('aria-hidden', 'false');
+      // Tenta focar no primeiro item do menu
+      if(elements.checkContrast) elements.checkContrast.focus();
+    } else {
+      elements.menuAccess.classList.add('hidden');
+      elements.menuAccess.setAttribute('aria-hidden', 'true');
+      elements.btnAccess.focus();
+    }
+  };
+
+  // Aplica o Zoom (escala visual + redimensionamento físico da janela)
+  const applyZoom = (zoomValue) => {
+    const scale = zoomValue / 100;
+    
+    // 1. Zoom visual (Aumenta o conteúdo interno)
+    elements.appWrapper.style.transform = `scale(${scale})`;
+
+    // 2. Redimensionamento FÍSICO da Janela (HTML e BODY)
+    // Calcula o novo tamanho baseado na escala
+    const newWidth = `${CONFIG.baseWidth * scale}px`;
+    const newHeight = `${CONFIG.baseHeight * scale}px`;
+
+    // Aplica no Body
+    elements.body.style.width = newWidth;
+    elements.body.style.height = newHeight;
+    
+    // CORREÇÃO CRÍTICA: Aplica no HTML também (obrigatório para extensões Chrome)
+    document.documentElement.style.width = newWidth;
+    document.documentElement.style.height = newHeight;
+  };
+
+  // Reseta o Timer/Cronômetro
+  const resetTimer = () => {
+    clearInterval(state.timerInterval);
+    state.isRunning = false;
+    elements.imgPlayPause.src = 'img/start.png';
+    
+    // Se for Cronômetro, zera. Se for Timer, volta para a tela de input.
+    if (state.mode === 'CHRONO') {
+      state.totalSeconds = 0;
+      updateDisplay();
+    } else {
+      elements.display.classList.add('hidden');
+      elements.inputWrapper.classList.remove('hidden');
+      state.totalSeconds = 0;
+      // Limpa os inputs para nova digitação
+      elements.inputMin.value = '';
+      elements.inputSec.value = '';
     }
 
-    // Fechar menu se clicar fora ou apertar ESC
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && !menuAccess.classList.contains('hidden')) {
-            closeAccessMenu();
-        }
-    });
+    // Reseta anel de progresso (se existir lógica visual futura)
+    if (elements.progressRing) {
+      elements.progressRing.style.strokeDashoffset = 0;
+    }
+  };
 
-    // --- Lógica Visual e Temas ---
+  // Alterna entre Modos (Cronômetro vs Temporizador)
+  const switchMode = (newMode) => {
+    // 1. Para tudo imediatamente
+    clearInterval(state.timerInterval);
+    state.isRunning = false;
+    elements.imgPlayPause.src = 'img/start.png';
+    
+    // 2. Define o novo modo
+    state.mode = newMode;
+    
+    // 3. Zera as variáveis de tempo (RESET FORÇADO)
+    state.totalSeconds = 0;
+    state.initialTimerSeconds = 0;
 
-    // Toggle Dark Mode
-    btnTheme.addEventListener('click', () => {
-        isDarkMode = !isDarkMode;
-        body.classList.toggle('dark-mode', isDarkMode);
+    if (newMode === 'CHRONO') {
+      // Visual dos botões
+      elements.btnModeChrono.classList.add('active-mode');
+      elements.btnModeTimer.classList.remove('active-mode');
+      
+      // Mostra Display, Esconde Inputs
+      elements.display.classList.remove('hidden');
+      elements.inputWrapper.classList.add('hidden');
+      
+      // Reseta visualmente o display para 00:00
+      updateDisplay();
+      
+    } else {
+      // Visual dos botões
+      elements.btnModeTimer.classList.add('active-mode');
+      elements.btnModeChrono.classList.remove('active-mode');
+      
+      // Esconde Display, Mostra Inputs
+      elements.display.classList.add('hidden');
+      elements.inputWrapper.classList.remove('hidden');
+      
+      // Limpa os inputs visualmente
+      elements.inputMin.value = '';
+      elements.inputSec.value = '';
+      
+      // Foca no primeiro campo
+      elements.inputMin.focus();
+    }
+    
+    // Reseta o anel SVG se houver progresso anterior
+    if (elements.progressRing) {
+      elements.progressRing.style.strokeDashoffset = 0;
+    }
+  };
+
+  // Lógica de Finalização do Timer
+  const handleTimerFinish = () => {
+    clearInterval(state.timerInterval);
+    state.isRunning = false;
+    elements.imgPlayPause.src = 'img/start.png';
+    state.totalSeconds = 0;
+    updateDisplay();
+    
+    setTimeout(() => {
+      alert("O TEMPO ACABOU!");
+      resetTimer(); // Volta para seleção de tempo
+    }, 100);
+  };
+
+  // =========================================
+  // 4. EVENTOS (LISTENERS)
+  // =========================================
+
+  // --- Controle do Menu ---
+  elements.btnAccess.addEventListener('click', () => {
+    const isHidden = elements.menuAccess.classList.contains('hidden');
+    toggleAccessMenu(isHidden);
+  });
+
+  // Fechar menu com ESC
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !elements.menuAccess.classList.contains('hidden')) {
+      toggleAccessMenu(false);
+    }
+  });
+
+  // --- Controles de Acessibilidade (LIGHT MODE AQUI) ---
+  elements.btnTheme.addEventListener('click', () => {
+    state.isDarkMode = !state.isDarkMode;
+    elements.body.classList.toggle('dark-mode', state.isDarkMode);
+    
+    // Troca ícone se necessário (Sol/Lua)
+    const iconPath = state.isDarkMode ? 'img/light-mode.png' : 'img/dark-mode.png';
+    elements.imgTheme.src = iconPath; 
+  });
+
+  elements.checkContrast.addEventListener('change', (e) => {
+    state.isHighContrast = e.target.checked;
+    if (state.isHighContrast) {
+      elements.body.classList.add('high-contrast');
+      elements.body.classList.remove('dark-mode'); // Prioridade ao alto contraste
+    } else {
+      elements.body.classList.remove('high-contrast');
+      if (state.isDarkMode) elements.body.classList.add('dark-mode');
+    }
+  });
+
+  elements.zoomRadios.forEach(radio => {
+    radio.addEventListener('change', (e) => applyZoom(parseInt(e.target.value)));
+  });
+
+  // --- Controles de Navegação (Modos) ---
+  elements.btnModeChrono.addEventListener('click', () => switchMode('CHRONO'));
+  elements.btnModeTimer.addEventListener('click', () => switchMode('TIMER'));
+
+  // --- Controles de Tempo (Play/Pause/Reset) ---
+  elements.btnReset.addEventListener('click', resetTimer);
+
+  elements.btnPlayPause.addEventListener('click', () => {
+    if (state.isRunning) {
+      // PAUSAR
+      clearInterval(state.timerInterval);
+      state.isRunning = false;
+      elements.imgPlayPause.src = 'img/start.png';
+    } else {
+      // INICIAR
+      
+      // Validação do modo Timer (precisa ter tempo definido)
+      if (state.mode === 'TIMER' && state.totalSeconds === 0) {
+        const mins = parseInt(elements.inputMin.value) || 0;
+        const secs = parseInt(elements.inputSec.value) || 0;
+        const total = (mins * 60) + secs;
+
+        if (total <= 0) return; // Não inicia se for zero
+
+        state.initialTimerSeconds = total;
+        state.totalSeconds = total;
         
-        // Troca o ícone (opcional, se tiver ícone de sol/lua separados)
-        const img = btnTheme.querySelector('img');
-        img.src = isDarkMode ? 'img/light-mode.png' : 'img/dark-mode.png';
-    });
-
-    // Toggle Alto Contraste (O que não estava funcionando no seu anterior)
-    checkContrast.addEventListener('change', (e) => {
-        isHighContrast = e.target.checked;
-        if (isHighContrast) {
-            body.classList.add('high-contrast');
-            // Força desligar dark mode visualmente se entrar em alto contraste
-            body.classList.remove('dark-mode'); 
-        } else {
-            body.classList.remove('high-contrast');
-            // Restaura dark mode se estava ativo
-            if (isDarkMode) body.classList.add('dark-mode');
-        }
-    });
-
-    // ... (resto do código anterior)
-
-    // Referência ao novo wrapper
-    const appWrapper = document.getElementById('app-wrapper');
-
-    // Lógica de Zoom Corrigida
-    zoomRadios.forEach(radio => {
-        radio.addEventListener('change', (e) => {
-            const zoomVal = parseInt(e.target.value); // ex: 100, 110, 120
-            const scale = zoomVal / 100; // ex: 1, 1.1, 1.2
-
-            // 1. Aplica o zoom visual no conteúdo
-            appWrapper.style.transform = `scale(${scale})`;
-
-            // 2. Redimensiona a janela da extensão fisicamente para caber o zoom
-            // Largura base (200) * escala
-            document.body.style.width = `${200 * scale}px`;
-            // Altura base (250) * escala
-            document.body.style.height = `${250 * scale}px`;
-        });
-    });
-
-    // ... (resto do código)
-
-    // --- Lógica do Cronômetro (Simples) ---
-
-    function updateDisplay() {
-        const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
-        const secs = (seconds % 60).toString().padStart(2, '0');
-        display.textContent = `${mins}:${secs}`;
-    }
-
-    btnPlayPause.addEventListener('click', () => {
-        if (isRunning) {
-            // Pausar
-            clearInterval(timerInterval);
-            imgPlayPause.src = 'img/start.png'; // Volta para play
-            // Se tiver imagem separada de pause: imgPlayPause.src = 'play.png'
-        } else {
-            // Iniciar
-            timerInterval = setInterval(() => {
-                seconds++;
-                updateDisplay();
-                // Animação do anel de progresso pode ser adicionada aqui
-            }, 1000);
-            imgPlayPause.src = 'img/pause.png'; 
-        }
-        isRunning = !isRunning;
-    });
-
-    btnReset.addEventListener('click', () => {
-        clearInterval(timerInterval);
-        isRunning = false;
-        seconds = 0;
+        // Prepara interface: Esconde input, mostra display
+        elements.inputWrapper.classList.add('hidden');
+        elements.display.classList.remove('hidden');
         updateDisplay();
-        imgPlayPause.src = 'img/start.png';
-        
-        // Reseta o anel SVG
-        document.querySelector('.progress-ring').style.strokeDashoffset = 0;
-    });
+      }
+
+      state.isRunning = true;
+      elements.imgPlayPause.src = 'img/pause.png';
+
+      state.timerInterval = setInterval(() => {
+        if (state.mode === 'CHRONO') {
+          state.totalSeconds++;
+          updateDisplay();
+        } else {
+          state.totalSeconds--;
+          updateDisplay();
+          
+          if (state.totalSeconds <= 0) {
+            handleTimerFinish();
+          }
+        }
+      }, 1000);
+    }
+  });
+
+// --- Lógica do FAQ ---
+  
+  // Abrir FAQ
+  elements.btnFaq.addEventListener('click', () => {
+    // Esconde a tela principal (Relógio)
+    elements.mainView.classList.add('hidden');
+    elements.mainView.setAttribute('aria-hidden', 'true');
+    
+    // Mostra o FAQ
+    elements.faqView.classList.remove('hidden');
+    elements.faqView.setAttribute('aria-hidden', 'false');
+    
+    // Foca no botão de fechar para acessibilidade
+    elements.btnCloseFaq.focus();
+  });
+
+  // Fechar FAQ (Voltar)
+  elements.btnCloseFaq.addEventListener('click', () => {
+    // Esconde o FAQ
+    elements.faqView.classList.add('hidden');
+    elements.faqView.setAttribute('aria-hidden', 'true');
+    
+    // Volta a tela principal
+    elements.mainView.classList.remove('hidden');
+    elements.mainView.setAttribute('aria-hidden', 'false');
+    
+    // Retorna foco ao botão que abriu
+    elements.btnFaq.focus();
+  });
+
 });
